@@ -9,17 +9,12 @@ import aiohttp
 from aiohttp.web_exceptions import HTTPNotModified, HTTPNotFound
 from aiohttp import web
 from aiohttp.web_urldispatcher import StaticRoute
-from .logs import aux_logger
+from .logs import aux_logger, fmt_size
 
 LIVE_RELOAD_SNIPPET = b'\n<script src="http://localhost:%d/livereload.js"></script>\n'
 
 
 def modify_main_app(app, **config):
-    static_path = config['static_path']
-    if static_path:
-        serve_root = static_path + '/'
-        app.router.register_route(CustomStaticRoute('static-router', config['static_url'], serve_root))
-
     live_reload_snippet = LIVE_RELOAD_SNIPPET % config['aux_port']
 
     async def on_prepare(request, response):
@@ -35,7 +30,7 @@ def serve_main_app(**config):
     app = app_factory(loop=loop)
 
     modify_main_app(app, **config)
-    handler = app.make_handler(access_log_format='[%t] %r %s %b')
+    handler = app.make_handler(access_log_format='%r %s %b')
     srv = loop.run_until_complete(loop.create_server(handler, '0.0.0.0', config['main_port']))
 
     try:
@@ -55,10 +50,13 @@ WS = 'websockets'
 
 
 class AuxiliaryApplication(web.Application):
-    def static_reload(self, src_path):
+    def static_reload(self, change_path):
         config = self['config']
         static_root = config['static_path']
-        path = Path(src_path).relative_to(static_root)
+        change_path = Path(change_path).relative_to(static_root)
+
+        path = Path(config['static_url']) / change_path
+
         cli_count = len(self[WS])
         if cli_count == 0:
             return
@@ -81,6 +79,12 @@ def create_auxiliary_app(*, loop=None, **config):
 
     app.router.add_route('GET', '/livereload.js', lr_script_handler)
     app.router.add_route('GET', '/livereload', websocket_handler)
+
+    static_path = config['static_path']
+    if static_path:
+        serve_root = static_path + '/'
+        app.router.register_route(CustomStaticRoute('static-router', config['static_url'], serve_root))
+
     return app
 
 
@@ -168,7 +172,7 @@ class CustomStaticRoute(StaticRoute):
             status, length = response.status, response.content_length
         finally:
             l = aux_logger.info if status in {200, 304} else aux_logger.warning
-            l(' > %s %s %s %s', request.method, request.path, status, _fmt_size(length))
+            l('> %s %s %s %s', request.method, request.path, status, fmt_size(length))
         return response
 
 
@@ -177,15 +181,6 @@ def _get_asset_content(asset_path):
         return ''
     with asset_path.open() as f:
         return 'Asset file contents:\n\n{}'.format(f.read())
-
-
-def _fmt_size(num):
-    if num == '':
-        return ''
-    if num < 1024:
-        return '{:0.0f}B'.format(num)
-    else:
-        return '{:0.1f}KB'.format(num / 1024)
 
 
 def import_string(hybrid_path, _trying_again=False):

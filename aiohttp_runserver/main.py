@@ -5,7 +5,7 @@ import click
 from watchdog.observers import Observer
 
 from aiohttp_runserver import VERSION
-from .logs import dft_logger, setup_logging
+from .logs import dft_logger, setup_logging, AuxiliaryLogHandler
 from .serve import create_auxiliary_app, import_string
 from .watch import CodeFileEventHandler, StaticFileEventEventHandler
 
@@ -40,24 +40,25 @@ def run_apps(app_path, **config):
         observer.schedule(static_file_eh, static_path, recursive=True)
     observer.start()
 
-    dft_logger.debug('Started auxiliary server at http://localhost:%s', config['aux_port'])
-
     loop = aux_app.loop
-    handler = aux_app.make_handler(access_log_format='%t %r %s %b')
+    handler = aux_app.make_handler(access_log=None)
     srv = loop.run_until_complete(loop.create_server(handler, '0.0.0.0', config['aux_port']))
+
+    p = AuxiliaryLogHandler.prefix
+    dft_logger.info('Starting aux server at http://localhost:%s %s', config['aux_port'], p)
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:  # pragma: no branch
         pass
     finally:
-        dft_logger.info('shutting down auxiliary server...')
+        dft_logger.debug('shutting down auxiliary server...')
         observer.stop()
         observer.join()
         srv.close()
         loop.run_until_complete(srv.wait_closed())
         loop.run_until_complete(aux_app.shutdown())
-        loop.run_until_complete(handler.finish_connections(1))
+        loop.run_until_complete(handler.finish_connections(0))
         loop.run_until_complete(aux_app.cleanup())
     loop.close()
 

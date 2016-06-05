@@ -6,7 +6,7 @@ from datetime import datetime
 
 from watchdog.events import PatternMatchingEventHandler, unicode_paths, match_any_paths
 
-from .logs import dft_logger
+from .logs import dft_logger, MainAccessLogHandler
 from .serve import serve_main_app
 
 # specific to jetbrains I think, very annoying if not ignored
@@ -78,7 +78,8 @@ class CodeFileEventHandler(_BaseEventHandler):
 
     def _start_process(self):
         if self._change_count == 0:
-            dft_logger.info('Starting dev server at http://localhost:%s, use Ctrl+C to quit', self._config['main_port'])
+            p = MainAccessLogHandler.prefix
+            dft_logger.info('Starting dev server at http://localhost:%s %s', self._config['main_port'], p)
         else:
             dft_logger.info('Restarting dev server at http://localhost:%s', self._config['main_port'])
 
