@@ -1,11 +1,9 @@
 aiohttp-runserver
 =================
 
-Development server for aiohttp apps.
+CLI based development server for [aiohttp](http://aiohttp.readthedocs.io/en/stable/) based web apps. 
 
------------------------
-
-CLI based development server for [aiohttp](http://aiohttp.readthedocs.io/en/stable/) based web apps. Includes:
+Includes:
 * auto-reload on code changes.
 * optional static file serving without modifying your app.
 * optional Livereload of css, javascript and full pages using [livereload.js](https://github.com/livereload/livereload-js) 
@@ -26,6 +24,10 @@ Simple usage:
 
 Where `get_app` is a function in `src/app.py` with takes one argument `loop` and returns an instance
 of `web.Application`.
+
+## Installation
+
+    pip install aiohttp_runserver
 
 <!-- end description -->
 

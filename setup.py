@@ -1,16 +1,10 @@
-import sys
 from setuptools import setup
 from aiohttp_runserver import VERSION
 
 description = 'Development server for aiohttp apps.'
-long_description = description
-
-if 'sdist' in sys.argv:
-    import pypandoc
-    with open('README.md', 'r') as f:
-        text = f.read()
-    text = text[:text.find('<!-- end description -->')].strip('\n ')
-    long_description = pypandoc.convert(text, 'rst', format='md')
+long_description = """\
+See `github.com/samuelcolvin/aiohttp_runserver <https://github.com/samuelcolvin/aiohttp_runserver>`__ for details.
+"""
 
 
 def check_livereload_js():
