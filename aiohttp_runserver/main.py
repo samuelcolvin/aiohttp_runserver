@@ -46,7 +46,7 @@ def run_apps(**config):
     static_path = config['static_path']
     if static_path:
         rel_path = Path(static_path).absolute().relative_to(os.getcwd())
-        dft_logger.info('serving static files from ./%s at %s%s', rel_path, url, config['static_url'])
+        dft_logger.info('serving static files from ./%s/ at %s%s', rel_path, url, config['static_url'])
 
     try:
         loop.run_forever()

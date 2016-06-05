@@ -10,7 +10,7 @@ install:
   - pip install -r requirements_test.txt
 
 script:
-  - flake8 aiohttp_runserver/ tests/
+#  - flake8 aiohttp_runserver/ tests/
   - py.test --cov=aiohttp_runserver
 
 after_success:

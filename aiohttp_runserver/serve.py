@@ -24,6 +24,7 @@ def modify_main_app(app, **config):
         # if a jinja environment is setup add a global variable `static_url`
         # which can be used as in `src="{{ static_url }}/foobar.css"`
         app[JINJA_ENV].globals['static_url'] = static_url
+        aux_logger.debug('global environment variable static_url="%s" added to jinja environment', static_url)
 
     async def on_prepare(request, response):
         if 'text/html' in response.content_type:
@@ -241,9 +242,11 @@ def import_string(file_path, attr_name=None, _trying_again=False):
 
     if attr_name is None:
         try:
-            attr_name = next(an for an in APP_FACTORY_NAMES if an in hasattr(module, an))
+            attr_name = next(an for an in APP_FACTORY_NAMES if hasattr(module, an))
         except StopIteration as e:
             raise ImportError('No name supplied and no default app factory found in "%s"' % module_path) from e
+        else:
+            aux_logger.debug('found default attribute "%s" in module "%s"' % (attr_name, module))
 
     try:
         attr = getattr(module, attr_name)
