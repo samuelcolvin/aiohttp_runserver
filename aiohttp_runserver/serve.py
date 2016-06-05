@@ -1,48 +1,15 @@
-import logging
+import os
+import sys
 import asyncio
-import re
 import json
 from pathlib import Path
+from importlib import import_module, reload
 
-import click
 import aiohttp
 from aiohttp.web_exceptions import HTTPNotModified, HTTPNotFound
 from aiohttp import web
 from aiohttp.web_urldispatcher import StaticRoute
-
-from .common import import_string
-
-logger = logging.getLogger('dev_server')
-
-
-class DevLogHandler(logging.Handler):
-    colours = {
-        logging.DEBUG: 'white',
-        logging.INFO: 'blue',
-        logging.WARN: 'yellow',
-    }
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self._width = click.get_terminal_size()[0]
-
-    def emit(self, record):
-        log_entry = self.format(record)
-        m = re.match('^(\[.*?\] )', log_entry)
-        time = click.style(m.groups()[0], fg='magenta')
-        msg = log_entry[m.end():]
-        if record.levelno == logging.INFO and msg.startswith(' >'):
-            msg = '{} {}'.format(click.style(' >', fg='blue'), msg[3:])
-        else:
-            msg = click.style(msg, fg=self.colours.get(record.levelno, 'red'))
-        click.echo(time + msg)
-
-handler = DevLogHandler()
-formatter = logging.Formatter('[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-logger.propagate = False
+from .logs import aux_logger
 
 LIVE_RELOAD_SNIPPET = b'\n<script src="http://localhost:%d/livereload.js"></script>\n'
 
@@ -50,7 +17,7 @@ LIVE_RELOAD_SNIPPET = b'\n<script src="http://localhost:%d/livereload.js"></scri
 def modify_main_app(app, **config):
     static_path = config['static_path']
     if static_path:
-        serve_root = '{}/'.format(static_path)
+        serve_root = static_path + '/'
         app.router.register_route(CustomStaticRoute('static-router', config['static_url'], serve_root))
 
     live_reload_snippet = LIVE_RELOAD_SNIPPET % config['aux_port']
@@ -95,7 +62,7 @@ class AuxiliaryApplication(web.Application):
         cli_count = len(self[WS])
         if cli_count == 0:
             return
-        logger.info('prompting reload of %s on %d client%s', path, cli_count, '' if cli_count == 1 else 's')
+        aux_logger.info('prompting reload of %s on %d client%s', path, cli_count, '' if cli_count == 1 else 's')
         for i, ws in enumerate(self[WS]):
             data = {
                 'command': 'reload',
@@ -140,12 +107,12 @@ async def websocket_handler(request):
             try:
                 data = json.loads(msg.data)
             except json.JSONDecodeError as e:
-                logger.error('JSON decode error: %s', str(e))
+                aux_logger.error('JSON decode error: %s', str(e))
             else:
                 command = data['command']
                 if command == 'hello':
                     if 'http://livereload.com/protocols/official-7' not in data['protocols']:
-                        logger.error('live reload protocol 7 not supported by client %s', msg.data)
+                        aux_logger.error('live reload protocol 7 not supported by client %s', msg.data)
                         ws.close()
                     else:
                         handshake = {
@@ -157,17 +124,17 @@ async def websocket_handler(request):
                         }
                         ws.send_str(json.dumps(handshake))
                 elif command == 'info':
-                    logger.debug('browser connected at %s', data['url'])
-                    logger.debug('browser plugins: %s', data['plugins'])
+                    aux_logger.debug('browser connected at %s', data['url'])
+                    aux_logger.debug('browser plugins: %s', data['plugins'])
                 else:
-                    logger.error('Unknown ws message %s', msg.data)
+                    aux_logger.error('Unknown ws message %s', msg.data)
         elif msg.tp == aiohttp.MsgType.error:
-            logger.error('ws connection closed with exception %s',  ws.exception())
+            aux_logger.error('ws connection closed with exception %s',  ws.exception())
         else:
-            logger.error('unknown websocket message type %s, data: %s', ws_type_lookup[msg.tp], msg.data)
+            aux_logger.error('unknown websocket message type %s, data: %s', ws_type_lookup[msg.tp], msg.data)
 
     # TODO gracefully close websocket connections on app shutdown
-    logger.debug('browser disconnected')
+    aux_logger.debug('browser disconnected')
     request.app[WS].remove(ws)
 
     return ws
@@ -200,7 +167,7 @@ class CustomStaticRoute(StaticRoute):
         else:
             status, length = response.status, response.content_length
         finally:
-            l = logger.info if status in {200, 304} else logger.warning
+            l = aux_logger.info if status in {200, 304} else aux_logger.warning
             l(' > %s %s %s %s', request.method, request.path, status, _fmt_size(length))
         return response
 
@@ -219,3 +186,41 @@ def _fmt_size(num):
         return '{:0.0f}B'.format(num)
     else:
         return '{:0.1f}KB'.format(num / 1024)
+
+
+def import_string(hybrid_path, _trying_again=False):
+    """
+    Import attribute/class from from a python module. Raise ImportError if the import failed.
+
+    Approximately stolen from django.
+
+    :param hybrid_path: "path" to file & attribute in the form path/to/file.py:attribute
+    :return: (attribute, Path object for directory of file)
+    """
+    try:
+        file_path, class_name = hybrid_path.rsplit(':', 1)
+    except ValueError as e:
+        raise ImportError("%s doesn't look like a proper path" % hybrid_path) from e
+
+    module_path = file_path.replace('.py', '').replace('/', '.')
+
+    try:
+        module = import_module(module_path)
+    except ImportError:
+        if _trying_again:
+            raise
+        # add current working directory to pythonpath and try again
+        p = os.getcwd()
+        aux_logger.debug('adding current working director %s to pythonpath and reattempting import', p)
+        sys.path.append(p)
+        return import_string(hybrid_path, True)
+
+    reload(module)
+
+    try:
+        attr = getattr(module, class_name)
+    except AttributeError as e:
+        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, class_name)) from e
+
+    directory = Path(module.__file__).parent
+    return attr, directory

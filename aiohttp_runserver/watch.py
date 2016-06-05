@@ -6,7 +6,7 @@ from datetime import datetime
 
 from watchdog.events import PatternMatchingEventHandler, unicode_paths, match_any_paths
 
-from .common import logger
+from .logs import dft_logger
 from .serve import serve_main_app
 
 # specific to jetbrains I think, very annoying if not ignored
@@ -53,7 +53,7 @@ class _BaseEventHandler(PatternMatchingEventHandler):
 
         self._since_change = (datetime.now() - self._change_dt).total_seconds()
         if self._since_change <= 1:
-            logger.debug('%s | %0.3f seconds since last build, skipping', event, self._since_change)
+            dft_logger.debug('%s | %0.3f seconds since last build, skipping', event, self._since_change)
             return
 
         self._change_dt = datetime.now()
@@ -72,27 +72,27 @@ class CodeFileEventHandler(_BaseEventHandler):
         self._start_process()
 
     def on_event(self, event):
-        logger.debug('%s | %0.3f seconds since last change, restarting server', event, self._since_change)
+        dft_logger.debug('%s | %0.3f seconds since last change, restarting server', event, self._since_change)
         self.stop_process()
         self._start_process()
 
     def _start_process(self):
         if self._change_count == 0:
-            logger.info('Starting dev server at http://localhost:%s, use Ctrl+C to quit', self._config['main_port'])
+            dft_logger.info('Starting dev server at http://localhost:%s, use Ctrl+C to quit', self._config['main_port'])
         else:
-            logger.info('Restarting dev server at http://localhost:%s', self._config['main_port'])
+            dft_logger.info('Restarting dev server at http://localhost:%s', self._config['main_port'])
 
         self._process = Process(target=serve_main_app, kwargs=self._config)
         self._process.start()
 
     def stop_process(self):
         if self._process.is_alive():
-            logger.debug('stopping server process...')
+            dft_logger.debug('stopping server process...')
             os.kill(self._process.pid, signal.SIGINT)
             self._process.join(5)
-            logger.debug('process stopped')
+            dft_logger.debug('process stopped')
         else:
-            logger.warning('server process already dead, exit code: %d', self._process.exitcode)
+            dft_logger.warning('server process already dead, exit code: %d', self._process.exitcode)
 
 
 class StaticFileEventEventHandler(_BaseEventHandler):
