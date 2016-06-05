@@ -10,17 +10,10 @@ from .logs import dft_logger, setup_logging, AuxiliaryLogHandler
 from .serve import create_auxiliary_app, import_string
 from .watch import CodeFileEventHandler, StaticFileEventEventHandler, AllCodeEventEventHandler
 
-static_help = ''
-static_url_help = ''
-port_help = ''
-aux_port_help = ''
-verbose_help = 'Enable verbose output.'
 
-
-def run_apps(app_path, **config):
-    _, code_path = import_string(app_path)
+def run_apps(**config):
+    _, code_path = import_string(config['app_path'], config['app_factory'])
     config.update(
-        app_path=app_path,
         code_path=str(code_path),
         static_path=str(Path(config.pop('static_path')).resolve()),
     )
@@ -71,19 +64,27 @@ def run_apps(app_path, **config):
         loop.run_until_complete(aux_app.cleanup())
     loop.close()
 
+static_help = "Path of static files to serve, if exclude static files aren't served."
+static_url_help = 'URL path to serve static files from, default "/static/".'
+port_help = 'Port to serve app from, default 8000.'
+aux_port_help = 'Port to serve auxiliary app (reload and static) on, default 8001.'
+verbose_help = 'Enable verbose output.'
+
+static_path_type = click.Path(exists=True, dir_okay=True, file_okay=False)
+
 
 @click.command()
-@click.version_option(VERSION, '-V', '--version')
-@click.argument('app', 'app_path', required=True)
-@click.option('-s', '--static', 'static_path',
-              type=click.Path(exists=True, dir_okay=True, file_okay=False), help=static_help)
-@click.option('-su', '--static-url', default='/static/', help=static_url_help)
+@click.version_option(VERSION, '-V', '--version', prog_name='aiohttp-runserver')
+@click.argument('app-path', type=click.Path(exists=True, dir_okay=False, file_okay=True), required=True)
+@click.argument('app-factory', required=False)
+@click.option('-s', '--static', 'static_path', type=static_path_type, help=static_help)
+@click.option('--static-url', default='/static/', help=static_url_help)
 @click.option('-p', '--port', 'main_port', default=8000, help=port_help)
-@click.option('-ap', '--aux-port', default=8001, help=aux_port_help)
+@click.option('--aux-port', default=8001, help=aux_port_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
-def cli(app, verbose, **config):
+def cli(verbose, **config):
     """
-    Run development server for aiohttp apps.
+    Development server for aiohttp apps.
     """
     setup_logging(verbose)
-    run_apps(app, **config)
+    run_apps(**config)

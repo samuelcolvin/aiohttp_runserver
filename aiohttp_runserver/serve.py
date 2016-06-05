@@ -24,7 +24,7 @@ def modify_main_app(app, **config):
 
 
 def serve_main_app(**config):
-    app_factory, _ = import_string(config['app_path'])
+    app_factory, _ = import_string(config['app_path'], config['app_factory'])
 
     loop = asyncio.new_event_loop()
     app = app_factory(loop=loop)
@@ -197,19 +197,24 @@ def _get_asset_content(asset_path):
         return 'Asset file contents:\n\n{}'.format(f.read())
 
 
-def import_string(hybrid_path, _trying_again=False):
+APP_FACTORY_NAMES = [
+    'app',
+    'app_factory',
+    'get_app',
+    'create_app',
+]
+
+
+def import_string(file_path, attr_name=None, _trying_again=False):
     """
     Import attribute/class from from a python module. Raise ImportError if the import failed.
 
     Approximately stolen from django.
 
-    :param hybrid_path: "path" to file & attribute in the form path/to/file.py:attribute
+    :param file_path: path to python module
+    :param attr_name: attribute to get from module
     :return: (attribute, Path object for directory of file)
     """
-    try:
-        file_path, class_name = hybrid_path.rsplit(':', 1)
-    except ValueError as e:
-        raise ImportError("%s doesn't look like a proper path" % hybrid_path) from e
 
     module_path = file_path.replace('.py', '').replace('/', '.')
 
@@ -222,14 +227,20 @@ def import_string(hybrid_path, _trying_again=False):
         p = os.getcwd()
         aux_logger.debug('adding current working director %s to pythonpath and reattempting import', p)
         sys.path.append(p)
-        return import_string(hybrid_path, True)
+        return import_string(file_path, attr_name, True)
 
     reload(module)
 
+    if attr_name is None:
+        try:
+            attr_name = next(an for an in APP_FACTORY_NAMES if an in hasattr(module, an))
+        except StopIteration as e:
+            raise ImportError('No name supplied and no default app factory found in "%s"' % module_path) from e
+
     try:
-        attr = getattr(module, class_name)
+        attr = getattr(module, attr_name)
     except AttributeError as e:
-        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, class_name)) from e
+        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, attr_name)) from e
 
     directory = Path(module.__file__).parent
     return attr, directory
