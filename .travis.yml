@@ -6,7 +6,8 @@ python:
   - "3.5"
 
 install:
-  - python setup.py install
+  - pip install --upgrade pip  # upgrading pip and install pyyaml first speeds up install significantly
+  - pip install .
   - pip install -r requirements_test.txt
 
 script:
