@@ -56,19 +56,34 @@ class AuxiliaryApplication(web.Application):
         change_path = Path(change_path).relative_to(static_root)
 
         path = Path(config['static_url']) / change_path
+        self._broadcast_change(path=str(path))
 
+    def src_reload(self):
+        self._broadcast_change()
+
+    def _broadcast_change(self, path=None):
         cli_count = len(self[WS])
         if cli_count == 0:
             return
-        aux_logger.info('prompting reload of %s on %d client%s', path, cli_count, '' if cli_count == 1 else 's')
-        for i, ws in enumerate(self[WS]):
+        s = '' if cli_count == 1 else 's'
+        aux_logger.info('prompting reload of %s on %d client%s', path or 'page', cli_count, s)
+        for ws, url in self[WS]:
             data = {
                 'command': 'reload',
-                'path': str(path),  # TODO subdirectory?
+                'path': path or url,
                 'liveCSS': True,
                 'liveImg': True,
             }
-            ws.send_str(json.dumps(data))
+            try:
+                ws.send_str(json.dumps(data))
+            except RuntimeError as e:
+                # "RuntimeError: websocket connection is closing" occurs if content type changes due to code change
+                aux_logger.error(str(e))
+
+    async def close_websockets(self):
+        aux_logger.debug('closing %d websockets...', len(self[WS]))
+        for ws, _ in self[WS]:
+            await ws.close()
 
 
 def create_auxiliary_app(*, loop=None, **config):
@@ -82,9 +97,8 @@ def create_auxiliary_app(*, loop=None, **config):
 
     static_path = config['static_path']
     if static_path:
-        serve_root = static_path + '/'
-        app.router.register_route(CustomStaticRoute('static-router', config['static_url'], serve_root))
-
+        static_root = static_path + '/'
+        app.router.register_route(CustomStaticRoute('static-router', config['static_url'], static_root))
     return app
 
 
@@ -100,9 +114,8 @@ async def lr_script_handler(request):
 
 
 async def websocket_handler(request):
-
     ws = web.WebSocketResponse()
-    request.app[WS].append(ws)
+    url = None
     await ws.prepare(request)
     ws_type_lookup = {k.value: v for v, k in aiohttp.MsgType.__members__.items()}
 
@@ -128,8 +141,9 @@ async def websocket_handler(request):
                         }
                         ws.send_str(json.dumps(handshake))
                 elif command == 'info':
-                    aux_logger.debug('browser connected at %s', data['url'])
-                    aux_logger.debug('browser plugins: %s', data['plugins'])
+                    aux_logger.debug('browser connected: %s', data)
+                    url = data['url'].split('/', 3)[-1]
+                    request.app[WS].append((ws, url))
                 else:
                     aux_logger.error('Unknown ws message %s', msg.data)
         elif msg.tp == aiohttp.MsgType.error:
@@ -139,8 +153,8 @@ async def websocket_handler(request):
 
     # TODO gracefully close websocket connections on app shutdown
     aux_logger.debug('browser disconnected')
-    request.app[WS].remove(ws)
-
+    if url:
+        request.app[WS].remove((ws, url))
     return ws
 
 

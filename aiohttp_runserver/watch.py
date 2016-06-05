@@ -18,16 +18,18 @@ class _BaseEventHandler(PatternMatchingEventHandler):
     ignore_directories = True
     ignore_patterns = [
         '*/.git/*',
+        '*/.idea/*',
+        # next two in case a virtualenv directory is included in watched path
         '*/include/python*',
         '*/lib/python*',
         '*/aiohttp_runserver/*',
-        '*/.idea/*',
         JB_BACKUP_FILE,
     ]
 
     def __init__(self, aux_app, config, *args, **kwargs):
         self._app = aux_app
         self._config = config
+
         self._change_dt = datetime.now()
         self._since_change = None
         self._change_count = 0
@@ -94,6 +96,18 @@ class CodeFileEventHandler(_BaseEventHandler):
             dft_logger.debug('process stopped')
         else:
             dft_logger.warning('server process already dead, exit code: %d', self._process.exitcode)
+
+
+class AllCodeEventEventHandler(_BaseEventHandler):
+    patterns = [
+        '*.py',
+        '*.html',
+        '*.jinja',
+        '*.jinja2',
+    ]
+
+    def on_event(self, event):
+        self._app.src_reload()
 
 
 class StaticFileEventEventHandler(_BaseEventHandler):
