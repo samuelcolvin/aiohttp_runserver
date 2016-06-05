@@ -44,27 +44,32 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 logger.propagate = False
 
+LIVE_RELOAD_SNIPPET = b'\n<script src="http://localhost:%d/livereload.js"></script>\n'
+
 
 def modify_main_app(app, **config):
     static_path = config['static_path']
     if static_path:
         serve_root = '{}/'.format(static_path)
         app.router.register_route(CustomStaticRoute('static-router', config['static_url'], serve_root))
-    # TODO add livereload snippet to all html files
+
+    live_reload_snippet = LIVE_RELOAD_SNIPPET % config['aux_port']
+
+    async def on_prepare(request, response):
+        if 'text/html' in response.content_type:
+            response.body += live_reload_snippet
+    app.on_response_prepare.append(on_prepare)
 
 
 def serve_main_app(**config):
-    app, _ = import_string(config['app_path'])
+    app_factory, _ = import_string(config['app_path'])
 
-    if callable(app):
-        app = app()
+    loop = asyncio.new_event_loop()
+    app = app_factory(loop=loop)
 
     modify_main_app(app, **config)
-    loop = app.loop
     handler = app.make_handler(access_log_format='[%t] %r %s %b')
-    srv = app.loop.run_until_complete(loop.create_server(handler, '0.0.0.0', config['main_port']))
-
-    logger.info('Started dev server at http://localhost:%s, use Ctrl+C to quit', config['main_port'])
+    srv = loop.run_until_complete(loop.create_server(handler, '0.0.0.0', config['main_port']))
 
     try:
         loop.run_forever()
@@ -87,8 +92,10 @@ class AuxiliaryApplication(web.Application):
         config = self['config']
         static_root = config['static_path']
         path = Path(src_path).relative_to(static_root)
-        clients = len(self[WS])
-        logger.info('prompting reload of %s on %d client%s', path, clients, '' if clients == 1 else 's')
+        cli_count = len(self[WS])
+        if cli_count == 0:
+            return
+        logger.info('prompting reload of %s on %d client%s', path, cli_count, '' if cli_count == 1 else 's')
         for i, ws in enumerate(self[WS]):
             data = {
                 'command': 'reload',
@@ -150,7 +157,7 @@ async def websocket_handler(request):
                         }
                         ws.send_str(json.dumps(handshake))
                 elif command == 'info':
-                    logger.info('browser connected at %s', data['url'])
+                    logger.debug('browser connected at %s', data['url'])
                     logger.debug('browser plugins: %s', data['plugins'])
                 else:
                     logger.error('Unknown ws message %s', msg.data)

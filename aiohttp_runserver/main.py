@@ -1,8 +1,8 @@
 import re
 import logging
+from pprint import pformat
 
 import click
-
 from aiohttp import web
 from watchdog.observers import Observer
 
@@ -50,7 +50,14 @@ def setup_logging(verbose=False):
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
-def run_apps(**config):
+def run_apps(app_path, **config):
+    _, code_path = import_string(app_path)
+    config.update(
+        app_path=app_path,
+        code_path=str(code_path),
+    )
+    logger.debug('config:\n%s', pformat(config))
+
     aux_app = create_auxiliary_app(**config)
 
     observer = Observer()
@@ -89,12 +96,5 @@ def cli(app, verbose, **config):
     """
     Run development server for aiohttp apps.
     """
-    _, code_path = import_string(app)
-    config.update(
-        app_path=app,
-        code_path=str(code_path),
-    )
-
     setup_logging(verbose)
-
-    run_apps(**config)
+    run_apps(app, **config)

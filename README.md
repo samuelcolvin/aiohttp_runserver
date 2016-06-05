@@ -7,5 +7,7 @@ Development server for aiohttp apps.
 
 ## TODO
 
-* test
+* logging
+* tests (waiting for aiohttp test utils to be released)
+* config file support
 * integration with https://github.com/aio-libs/aiohttp_debugtoolbar
