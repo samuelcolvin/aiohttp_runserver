@@ -11,11 +11,19 @@ from aiohttp import web
 from aiohttp.web_urldispatcher import StaticRoute
 from .logs import aux_logger, fmt_size
 
-LIVE_RELOAD_SNIPPET = b'\n<script src="http://localhost:%d/livereload.js"></script>\n'
+LIVE_RELOAD_SNIPPET = b'\n<script src="%s/livereload.js"></script>\n'
+JINJA_ENV = 'aiohttp_jinja2_environment'
 
 
 def modify_main_app(app, **config):
-    live_reload_snippet = LIVE_RELOAD_SNIPPET % config['aux_port']
+    aux_server = 'http://localhost:{aux_port}'.format(**config)
+    live_reload_snippet = LIVE_RELOAD_SNIPPET % aux_server.encode('utf8')
+
+    if JINJA_ENV in app:
+        static_url = '{}/{}'.format(aux_server, config['static_url'].strip('/'))
+        # if a jinja environment is setup add a global variable `static_url`
+        # which can be used as in `src="{{ static_url }}/foobar.css"`
+        app[JINJA_ENV].globals['static_url'] = static_url
 
     async def on_prepare(request, response):
         if 'text/html' in response.content_type:
