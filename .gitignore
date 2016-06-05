@@ -1,0 +1,17 @@
+*.py[cod]
+.idea/
+env/
+*.egg-info
+node_modules/
+examples/
+.cache/
+.coverage
+.coverage.*
+coverage.xml
+try.py
+.serve/
+/build/
+/dist/
+/htmlcov/
+/aiohttp_runserver/livereload.js
+test*.py

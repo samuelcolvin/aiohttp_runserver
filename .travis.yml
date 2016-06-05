@@ -1,0 +1,18 @@
+language: python
+
+cache: pip
+
+python:
+  - "3.5"
+
+install:
+  - python setup.py install
+  - pip install -r requirements_test.txt
+
+script:
+  - flake8 aiohttp_runserver/ tests/
+  - py.test --cov=aiohttp_runserver
+
+after_success:
+  - coverage combine
+  - codecov
