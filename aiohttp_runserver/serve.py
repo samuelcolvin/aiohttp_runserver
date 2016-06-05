@@ -3,11 +3,12 @@ import sys
 import asyncio
 import json
 from pathlib import Path
+
 from importlib import import_module, reload
 
-import aiohttp
+from aiohttp import web, MsgType
+from aiohttp.hdrs import LAST_MODIFIED
 from aiohttp.web_exceptions import HTTPNotModified, HTTPNotFound
-from aiohttp import web
 from aiohttp.web_urldispatcher import StaticRoute
 from .logs import aux_logger, fmt_size
 
@@ -101,7 +102,7 @@ def create_auxiliary_app(*, loop=None, **config):
     app[WS] = []
     app['config'] = config
 
-    app.router.add_route('GET', '/livereload.js', lr_script_handler)
+    app.router.add_route('GET', '/livereload.js', livereload_js)
     app.router.add_route('GET', '/livereload', websocket_handler)
 
     static_path = config['static_path']
@@ -111,7 +112,11 @@ def create_auxiliary_app(*, loop=None, **config):
     return app
 
 
-async def lr_script_handler(request):
+async def livereload_js(request):
+    if request.if_modified_since:
+        aux_logger.debug('> %s %s %s 0', request.method, request.path, 304)
+        raise HTTPNotModified()
+
     script_key = 'livereload_script'
     lr_script = request.app.get(script_key)
     if lr_script is None:
@@ -119,17 +124,20 @@ async def lr_script_handler(request):
         with lr_path.open('rb') as f:
             lr_script = f.read()
             request.app[script_key] = lr_script
-    return web.Response(body=lr_script, content_type='application/javascript')
+
+    aux_logger.debug('> %s %s %s %s', request.method, request.path, 200, fmt_size(len(lr_script)))
+    return web.Response(body=lr_script, content_type='application/javascript',
+                        headers={LAST_MODIFIED: 'Fri, 01 Jan 2016 00:00:00 GMT'})
 
 
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
     url = None
     await ws.prepare(request)
-    ws_type_lookup = {k.value: v for v, k in aiohttp.MsgType.__members__.items()}
+    ws_type_lookup = {k.value: v for v, k in MsgType.__members__.items()}
 
     async for msg in ws:
-        if msg.tp == aiohttp.MsgType.text:
+        if msg.tp == MsgType.text:
             try:
                 data = json.loads(msg.data)
             except json.JSONDecodeError as e:
@@ -155,7 +163,7 @@ async def websocket_handler(request):
                     request.app[WS].append((ws, url))
                 else:
                     aux_logger.error('Unknown ws message %s', msg.data)
-        elif msg.tp == aiohttp.MsgType.error:
+        elif msg.tp == MsgType.error:
             aux_logger.error('ws connection closed with exception %s',  ws.exception())
         else:
             aux_logger.error('unknown websocket message type %s, data: %s', ws_type_lookup[msg.tp], msg.data)
