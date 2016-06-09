@@ -19,6 +19,8 @@ JINJA_ENV = 'aiohttp_jinja2_environment'
 def modify_main_app(app, **config):
     aux_server = 'http://localhost:{aux_port}'.format(**config)
     live_reload_snippet = LIVE_RELOAD_SNIPPET % aux_server.encode('utf8')
+    livereload_enabled = config['livereload']
+    aux_logger.debug('livereload enabled: %s', '✓' if livereload_enabled else '✖')
 
     if JINJA_ENV in app:
         static_url = '{}/{}'.format(aux_server, config['static_url'].strip('/'))
@@ -28,7 +30,7 @@ def modify_main_app(app, **config):
         aux_logger.debug('global environment variable static_url="%s" added to jinja environment', static_url)
 
     async def on_prepare(request, response):
-        if 'text/html' in response.content_type:
+        if livereload_enabled and 'text/html' in response.content_type:
             response.body += live_reload_snippet
     app.on_response_prepare.append(on_prepare)
 
@@ -168,7 +170,6 @@ async def websocket_handler(request):
         else:
             aux_logger.error('unknown websocket message type %s, data: %s', ws_type_lookup[msg.tp], msg.data)
 
-    # TODO gracefully close websocket connections on app shutdown
     aux_logger.debug('browser disconnected')
     if url:
         request.app[WS].remove((ws, url))
