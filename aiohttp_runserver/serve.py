@@ -4,13 +4,13 @@ import asyncio
 import json
 from pathlib import Path
 
-from importlib import import_module, reload
+from importlib import import_module
 
 from aiohttp import web, MsgType
 from aiohttp.hdrs import LAST_MODIFIED
 from aiohttp.web_exceptions import HTTPNotModified, HTTPNotFound
 from aiohttp.web_urldispatcher import StaticRoute
-from .logs import aux_logger, fmt_size
+from .logs import aux_logger, fmt_size, setup_logging
 
 LIVE_RELOAD_SNIPPET = b'\n<script src="%s/livereload.js"></script>\n'
 JINJA_ENV = 'aiohttp_jinja2_environment'
@@ -18,7 +18,7 @@ JINJA_ENV = 'aiohttp_jinja2_environment'
 
 def modify_main_app(app, **config):
     aux_server = 'http://localhost:{aux_port}'.format(**config)
-    live_reload_snippet = LIVE_RELOAD_SNIPPET % aux_server.encode('utf8')
+    live_reload_snippet = LIVE_RELOAD_SNIPPET % aux_server.encode()
     livereload_enabled = config['livereload']
     aux_logger.debug('livereload enabled: %s', '✓' if livereload_enabled else '✖')
 
@@ -36,10 +36,14 @@ def modify_main_app(app, **config):
 
 
 def serve_main_app(**config):
+    setup_logging(config['verbose'])
     app_factory, _ = import_string(config['app_path'], config['app_factory'])
 
     loop = asyncio.new_event_loop()
     app = app_factory(loop=loop)
+
+    if app is None:
+        raise TypeError('"app" may not be none')
 
     modify_main_app(app, **config)
     handler = app.make_handler(access_log_format='%r %s %b')
@@ -198,7 +202,7 @@ class CustomStaticRoute(StaticRoute):
             raise
         except HTTPNotFound:
             _404_msg = '404: Not Found\n\n' + _get_asset_content(self._asset_path)
-            response = web.Response(body=_404_msg.encode('utf8'), status=404)
+            response = web.Response(body=_404_msg.encode(), status=404)
             status, length = response.status, response.content_length
         else:
             status, length = response.status, response.content_length
@@ -246,8 +250,6 @@ def import_string(file_path, attr_name=None, _trying_again=False):
         aux_logger.debug('adding current working director %s to pythonpath and reattempting import', p)
         sys.path.append(p)
         return import_string(file_path, attr_name, True)
-
-    reload(module)
 
     if attr_name is None:
         try:

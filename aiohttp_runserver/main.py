@@ -85,9 +85,9 @@ static_path_type = click.Path(exists=True, dir_okay=True, file_okay=False)
 @click.option('-p', '--port', 'main_port', default=8000, help=port_help)
 @click.option('--aux-port', default=8001, help=aux_port_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
-def cli(verbose, **config):
+def cli(**config):
     """
     Development server for aiohttp apps.
     """
-    setup_logging(verbose)
+    setup_logging(config['verbose'])
     run_apps(**config)
