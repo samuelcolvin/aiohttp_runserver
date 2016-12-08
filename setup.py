@@ -55,7 +55,7 @@ setup(
     keywords='aiohttp,debug,development,reload,livereload,server',
     author='Samuel Colvin',
     author_email='s@muelcolvin.com',
-    url='https://github.com/samuelcolvin/aiohttp-runserver',
+    url='https://github.com/samuelcolvin/aiohttp_runserver',
     license='MIT',
     packages=['aiohttp_runserver'],
     zip_safe=True,
